@@ -1,0 +1,15 @@
+{
+  "name": "Som Care Pharmacy",
+  "short_name": "Som Care",
+  "description": "Your trusted online pharmacy — order medicines from anywhere.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#10b981",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "categories": ["health", "medical", "shopping"],
+  "lang": "en"
+}
