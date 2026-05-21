@@ -51,18 +51,17 @@ const diskStorage = (sub) => multer.diskStorage({
 
 const LIMITS = { fileSize: 5 * 1024 * 1024 };
 
-// When Cloudinary is configured use memory storage so we can stream to Cloudinary.
-// Otherwise fall back to local disk.
+// Export multer instances (not pre-called middleware) so route files can call .single() themselves
 const uploadMedicineImage = USE_CLOUDINARY
-  ? multer({ storage: multer.memoryStorage(), fileFilter: imageFilter, limits: LIMITS }).single('image')
-  : multer({ storage: diskStorage('medicines'), fileFilter: imageFilter, limits: LIMITS }).single('image');
+  ? multer({ storage: multer.memoryStorage(), fileFilter: imageFilter, limits: LIMITS })
+  : multer({ storage: diskStorage('medicines'), fileFilter: imageFilter, limits: LIMITS });
 
 const uploadPrescription = USE_CLOUDINARY
-  ? multer({ storage: multer.memoryStorage(), fileFilter: imageFilter, limits: { fileSize: 10 * 1024 * 1024 } }).single('image')
-  : multer({ storage: diskStorage('prescriptions'), fileFilter: imageFilter, limits: { fileSize: 10 * 1024 * 1024 } }).single('image');
+  ? multer({ storage: multer.memoryStorage(), fileFilter: imageFilter, limits: { fileSize: 10 * 1024 * 1024 } })
+  : multer({ storage: diskStorage('prescriptions'), fileFilter: imageFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
 const uploadAvatar = USE_CLOUDINARY
-  ? multer({ storage: multer.memoryStorage(), fileFilter: imageFilter, limits: { fileSize: 2 * 1024 * 1024 } }).single('avatar')
-  : multer({ storage: diskStorage('avatars'), fileFilter: imageFilter, limits: { fileSize: 2 * 1024 * 1024 } }).single('avatar');
+  ? multer({ storage: multer.memoryStorage(), fileFilter: imageFilter, limits: { fileSize: 2 * 1024 * 1024 } })
+  : multer({ storage: diskStorage('avatars'), fileFilter: imageFilter, limits: { fileSize: 2 * 1024 * 1024 } });
 
 module.exports = { uploadMedicineImage, uploadPrescription, uploadAvatar, uploadToCloudinary, USE_CLOUDINARY };
