@@ -1,6 +1,13 @@
 const prisma = require('../config/database');
 const { success, error, paginated } = require('../utils/response');
 const { uniqueSlug } = require('../utils/slugify');
+const { uploadToCloudinary, USE_CLOUDINARY } = require('../middleware/upload');
+
+const resolveImageUrl = async (req) => {
+  if (!req.file) return undefined;
+  if (USE_CLOUDINARY) return await uploadToCloudinary(req.file.buffer, 'medicines');
+  return `/uploads/medicines/${req.file.filename}`;
+};
 
 // Optional string fields — convert '' to null so unique constraints (barcode, sku) never collide on blank values
 const OPTIONAL_STRINGS = [
@@ -75,7 +82,8 @@ const create = async (req, res, next) => {
     const data = sanitize(req.body);
     data.slug = await uniqueSlug(prisma, 'medicine', data.name);
 
-    if (req.file) data.imageUrl = `/uploads/medicines/${req.file.filename}`;
+    const imageUrl = await resolveImageUrl(req);
+    if (imageUrl) data.imageUrl = imageUrl;
 
     const numericFields = ['categoryId', 'piecesPerStrip', 'stripsPerBox', 'boxesPerDozen', 'boxesPerCarton', 'stockQuantity', 'minimumStock'];
     numericFields.forEach(f => { if (data[f] !== undefined && data[f] !== null) data[f] = parseInt(data[f]); });
@@ -118,7 +126,8 @@ const update = async (req, res, next) => {
     const data = sanitize({ ...req.body });
 
     if (data.name) data.slug = await uniqueSlug(prisma, 'medicine', data.name, parseInt(id));
-    if (req.file) data.imageUrl = `/uploads/medicines/${req.file.filename}`;
+    const imageUrl = await resolveImageUrl(req);
+    if (imageUrl) data.imageUrl = imageUrl;
 
     const numericFields = ['categoryId', 'piecesPerStrip', 'stripsPerBox', 'boxesPerDozen', 'boxesPerCarton', 'minimumStock'];
     numericFields.forEach(f => { if (data[f] !== undefined && data[f] !== null) data[f] = parseInt(data[f]); });

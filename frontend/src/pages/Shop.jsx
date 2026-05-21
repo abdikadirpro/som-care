@@ -4,7 +4,13 @@ import {
   MdSearch, MdClose, MdAdd, MdRemove, MdDelete,
   MdShoppingCart, MdArrowForward, MdCheck, MdContentCopy,
 } from 'react-icons/md';
-import { GiPill } from 'react-icons/gi';
+import { GiPill, GiMedicinePills } from 'react-icons/gi';
+
+const BACKEND = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '');
+const imgUrl = (url) => {
+  if (!url) return null;
+  return url.startsWith('http') ? url : `${BACKEND}${url}`;
+};
 import { useAuth } from '../context/AuthContext';
 import { useShopCart } from '../context/ShopCartContext';
 import api from '../utils/api';
@@ -162,7 +168,7 @@ export default function Shop() {
             <GiPill style={{ fontSize: 56, opacity: .2, marginBottom: '1rem' }} />
             <p style={{ fontSize: 14 }}>{search ? `No results for "${search}"` : 'No medicines available'}</p>
           </div>
-        : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(160px,1fr))', gap: '1rem' }}>
+        : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(185px,1fr))', gap: '1rem' }}>
             {medicines.map(med => (
               <ShopMedicineCard key={med.id} med={med} onAdd={() => handleAddToCart(med)} />
             ))}
@@ -370,28 +376,66 @@ export default function Shop() {
 }
 
 function ShopMedicineCard({ med, onAdd }) {
+  const [imgErr, setImgErr] = useState(false);
+  const photo = imgUrl(med.imageUrl);
+  const initials = med.name.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+
   return (
-    <div style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 14, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '.35rem', transition: 'all .15s', cursor: 'default' }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(16,185,129,.3)'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,.08)'; e.currentTarget.style.transform = 'none'; }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '.2rem' }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(16,185,129,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <GiPill style={{ color: '#10b981', fontSize: 20 }} />
+    <div
+      style={{ background:'rgba(255,255,255,.03)', border:'1px solid rgba(255,255,255,.08)', borderRadius:16, overflow:'hidden', display:'flex', flexDirection:'column', transition:'all .18s', cursor:'default' }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(16,185,129,.35)'; e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow='0 8px 24px rgba(16,185,129,.12)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,.08)'; e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='none'; }}>
+
+      {/* Image area */}
+      <div style={{ position:'relative', width:'100%', height:150, background:'linear-gradient(135deg,#0d2e1a,#0a1f2e)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
+        {photo && !imgErr
+          ? <img src={photo} alt={med.name} onError={() => setImgErr(true)}
+              style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+          : <>
+              <div style={{ position:'absolute', width:100, height:100, borderRadius:'50%', border:'1px solid rgba(16,185,129,.12)', top:'50%', left:'50%', transform:'translate(-50%,-50%)' }} />
+              <div style={{ position:'absolute', width:65, height:65, borderRadius:'50%', border:'1px solid rgba(16,185,129,.18)', top:'50%', left:'50%', transform:'translate(-50%,-50%)' }} />
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'.2rem', zIndex:1 }}>
+                <div style={{ width:42, height:42, borderRadius:'50%', background:'rgba(16,185,129,.15)', border:'2px solid rgba(16,185,129,.25)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                  <GiMedicinePills style={{ color:'#10b981', fontSize:22 }} />
+                </div>
+                <span style={{ fontSize:10, fontWeight:900, color:'rgba(255,255,255,.3)', letterSpacing:1 }}>{initials}</span>
+              </div>
+            </>
+        }
+        {/* Stock badge */}
+        <div style={{ position:'absolute', top:8, right:8, background:'rgba(0,0,0,.55)', backdropFilter:'blur(6px)', color:'#10b981', fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:99 }}>
+          {med.stockQuantity} left
         </div>
-        <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 99, background: 'rgba(16,185,129,.12)', color: '#10b981', fontWeight: 700 }}>{med.stockQuantity} left</span>
+        {/* Featured star */}
+        {med.featured && (
+          <div style={{ position:'absolute', top:8, left:8, background:'linear-gradient(90deg,#f59e0b,#f97316)', color:'#fff', fontSize:8, fontWeight:800, padding:'2px 6px', borderRadius:99 }}>★ Featured</div>
+        )}
       </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: 30 }}>{med.name}</div>
-      {med.genericName && <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)' }}>{med.genericName}</div>}
-      <div style={{ fontSize: 10, color: 'rgba(255,255,255,.35)' }}>{med.form}{med.strength ? ` · ${med.strength}` : ''}</div>
-      {med.category && <div style={{ fontSize: 9, padding: '1px 6px', borderRadius: 99, background: 'rgba(255,255,255,.05)', color: 'rgba(255,255,255,.4)', alignSelf: 'flex-start' }}>{med.category.icon} {med.category.name}</div>}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '.4rem' }}>
-        <span style={{ fontSize: 15, fontWeight: 900, color: '#10b981' }}>{formatCurrency(med.retailPrice)}</span>
-        <button onClick={onAdd}
-          style={{ width: 32, height: 32, borderRadius: 9, background: '#10b981', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(16,185,129,.3)', transition: 'transform .1s' }}
-          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
-          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
-          <MdAdd style={{ fontSize: 18 }} />
-        </button>
+
+      {/* Info */}
+      <div style={{ padding:'.8rem .9rem', flex:1, display:'flex', flexDirection:'column', gap:'.25rem' }}>
+        {med.category && (
+          <span style={{ fontSize:9, fontWeight:700, color:'#06b6d4', textTransform:'uppercase', letterSpacing:.8 }}>
+            {med.category.icon} {med.category.name}
+          </span>
+        )}
+        <div style={{ fontSize:12, fontWeight:800, color:'#fff', lineHeight:1.35, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', minHeight:30 }}>
+          {med.name}
+        </div>
+        {(med.form||med.strength) && (
+          <div style={{ fontSize:10, color:'rgba(255,255,255,.35)' }}>
+            {[med.form,med.strength].filter(Boolean).join(' · ')}
+          </div>
+        )}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'auto', paddingTop:'.5rem' }}>
+          <span style={{ fontSize:15, fontWeight:900, color:'#10b981' }}>{formatCurrency(med.retailPrice)}</span>
+          <button onClick={onAdd}
+            style={{ width:34, height:34, borderRadius:10, background:'#10b981', color:'#fff', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 10px rgba(16,185,129,.35)', transition:'transform .1s' }}
+            onMouseEnter={e => e.currentTarget.style.transform='scale(1.1)'}
+            onMouseLeave={e => e.currentTarget.style.transform='scale(1)'}>
+            <MdAdd style={{ fontSize:18 }} />
+          </button>
+        </div>
       </div>
     </div>
   );
