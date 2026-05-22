@@ -145,11 +145,39 @@ select.input { appearance: none; cursor: pointer; }
 .sidebar-close-btn { display: none; }
 
 /* ─── Responsive ──────────────────────────────────────────────── */
+/* ─── POS two-panel grid ──────────────────────────────────────── */
+.pos-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 1rem;
+  height: calc(100vh - var(--header-h) - 3rem);
+  overflow: hidden;
+}
+
+/* ─── Main content area padding ──────────────────────────────── */
+.main-content {
+  flex: 1;
+  padding: 1.5rem;
+  margin-top: var(--header-h);
+  background: var(--bg);
+}
+
+@media (max-width: 1024px) {
+  .pos-grid { grid-template-columns: 1fr 320px; }
+}
+
 @media (max-width: 768px) {
   :root { --sidebar-w: 0px; }
   .sidebar-overlay   { display: block; }
   .sidebar-close-btn { display: flex !important; }
   .form-grid, .form-grid-3 { grid-template-columns: 1fr; }
+
+  /* POS stacks vertically on mobile */
+  .pos-grid {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
 
   /* Tables scroll horizontally instead of overflowing/squishing */
   .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -171,6 +199,12 @@ select.input { appearance: none; cursor: pointer; }
 
   /* Search bar full width */
   .search-bar { width: 100%; }
+
+  /* Main content reduced padding on mobile */
+  .main-content { padding: 1rem; }
+
+  /* Header user text hidden on mobile to save space */
+  .header-user-text { display: none !important; }
 }
 
 @media (max-width: 480px) {
@@ -183,4 +217,5 @@ select.input { appearance: none; cursor: pointer; }
   .modal-footer { padding: .75rem 1rem; }
   .badge        { font-size: 10px; padding: 2px 7px; }
   .header-alerts { display: none; }
+  .main-content  { padding: .75rem; }
 }

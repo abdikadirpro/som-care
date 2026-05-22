@@ -85,7 +85,7 @@ export default function Header({ onMenuToggle, sidebarOpen }) {
 
         {/* User Avatar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
-          <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column' }}>
+          <div className="header-user-text" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column' }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{user?.firstName}</span>
             <span style={{ fontSize: 10, color: 'var(--primary)', fontWeight: 500 }}>{user?.role?.replace('_',' ')}</span>
           </div>

@@ -149,10 +149,7 @@ export default function POS() {
   const totalCatCount = categories.reduce((s, c) => s + (c._count?.medicines || 0), 0);
 
   return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: '1fr 380px', gap: '1rem',
-      height: 'calc(100vh - var(--header-h) - 3rem)', overflow: 'hidden',
-    }}>
+    <div className="pos-grid">
 
       {/* ══ LEFT — Shelf ══════════════════════════════════════════════════════ */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '.65rem', height: '100%', overflow: 'hidden' }}>

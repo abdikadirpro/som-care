@@ -20,12 +20,7 @@ export default function AppLayout() {
         minHeight: '100vh',
       }}>
         <Header onMenuToggle={() => setSidebarOpen(p => !p)} sidebarOpen={sidebarOpen} />
-        <main style={{
-          flex: 1,
-          padding: '1.5rem',
-          marginTop: 'var(--header-h)',
-          background: 'var(--bg)',
-        }}>
+        <main className="main-content">
           <Outlet />
         </main>
       </div>
