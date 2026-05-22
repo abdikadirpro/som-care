@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MdHealthAndSafety, MdPerson, MdEmail, MdLock, MdPhone, MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { useAuth } from '../context/AuthContext';
+import api from '../utils/api';
 import toast from 'react-hot-toast';
 
 export default function CustomerRegister() {
@@ -24,13 +25,10 @@ export default function CustomerRegister() {
     setLoading(true);
     try {
       // Register then auto-login
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ firstName: form.firstName, lastName: form.lastName, email: form.email, phone: form.phone, password: form.password, role: 'CUSTOMER' }),
+      const { data: json } = await api.post('/auth/register', {
+        firstName: form.firstName, lastName: form.lastName, email: form.email,
+        phone: form.phone, password: form.password, role: 'CUSTOMER',
       });
-      const json = await res.json();
-      if (!res.ok) { toast.error(json.message || 'Registration failed'); return; }
 
       // Auto-login
       await login(form.email, form.password);
