@@ -31,6 +31,7 @@ export const ShopCartProvider = ({ children }) => {
         price: parseFloat(medicine.retailPrice),
         maxStock: medicine.stockQuantity,
         quantity: qty,
+        prescriptionRequired: medicine.prescriptionRequired || false,
       }];
     });
   }, []);

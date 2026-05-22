@@ -69,7 +69,7 @@ export default function Header({ onMenuToggle, sidebarOpen }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: '.75rem' }}>
         {/* Alerts */}
         {totalAlerts > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+          <div className="header-alerts" style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
             {alerts.lowStock > 0 && (
               <Link to="/inventory" style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 99, background: 'rgba(245,158,11,.15)', color: 'var(--warning)', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
                 <MdWarning /> {alerts.lowStock} Low Stock

@@ -133,7 +133,54 @@ select.input { appearance: none; cursor: pointer; }
 .fade-in { animation: fadeIn .3s ease; }
 .slide-up { animation: slideUp .35s ease; }
 
+/* ─── Sidebar overlay (mobile backdrop) ─────────────────────── */
+.sidebar-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 39;
+  backdrop-filter: blur(2px);
+}
+/* Close button inside sidebar — hidden on desktop */
+.sidebar-close-btn { display: none; }
+
+/* ─── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
   :root { --sidebar-w: 0px; }
+  .sidebar-overlay   { display: block; }
+  .sidebar-close-btn { display: flex !important; }
   .form-grid, .form-grid-3 { grid-template-columns: 1fr; }
+
+  /* Tables scroll horizontally instead of overflowing/squishing */
+  .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-container table { min-width: 580px; }
+
+  /* Page headers stack vertically so action buttons don't overflow */
+  .page-header { flex-direction: column; align-items: flex-start; gap: .5rem; }
+  .page-title  { font-size: 1.25rem; }
+
+  /* Modals become bottom-sheets */
+  .modal-overlay { padding: .5rem; align-items: flex-end; }
+  .modal { max-width: 100% !important; border-radius: var(--radius) var(--radius) 0 0; max-height: 92vh; }
+
+  /* Pagination stacks vertically */
+  .pagination { flex-direction: column; align-items: center; gap: .5rem; text-align: center; }
+
+  /* Stat cards already use auto-fill grid but reduce padding */
+  .stat-card { padding: 1rem; }
+
+  /* Search bar full width */
+  .search-bar { width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .page-title   { font-size: 1.1rem; }
+  th, td        { padding: .6rem .65rem; font-size: 12px; }
+  .btn          { font-size: 12px; padding: .4rem .8rem; }
+  .btn-lg       { font-size: 13px; padding: .6rem 1.1rem; }
+  .modal-header { padding: 1rem; }
+  .modal-body   { padding: 1rem; }
+  .modal-footer { padding: .75rem 1rem; }
+  .badge        { font-size: 10px; padding: 2px 7px; }
+  .header-alerts { display: none; }
 }

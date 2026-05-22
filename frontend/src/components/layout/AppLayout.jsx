@@ -4,7 +4,9 @@ import Sidebar from './Sidebar';
 import Header from './Header';
 
 export default function AppLayout() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth >= 768
+  );
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>

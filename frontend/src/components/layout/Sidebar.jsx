@@ -3,7 +3,7 @@ import {
   MdDashboard, MdPointOfSale, MdMedication, MdInventory2,
   MdShoppingCart, MdLocalShipping, MdBarChart, MdListAlt,
   MdSettings, MdSupervisedUserCircle, MdLogout, MdHealthAndSafety,
-  MdAdminPanelSettings,
+  MdAdminPanelSettings, MdClose, MdShoppingBag,
 } from 'react-icons/md';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -11,22 +11,21 @@ import toast from 'react-hot-toast';
 const ADMIN       = ['SUPER_ADMIN', 'ADMIN'];
 const POS_ROLES   = ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST', 'CASHIER'];
 const STOCK_ROLES = ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST'];
+const ORDER_ROLES = ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST'];
 
-// null roles = everyone; a label with no `to` = section header divider
 const navItems = [
-  // ── Staff section ────────────────────────────────────────────
-  { to: '/dashboard', icon: MdDashboard,           label: 'Dashboard',   roles: null },
-  { to: '/pos',       icon: MdPointOfSale,          label: 'POS',         roles: POS_ROLES },
-  { to: '/stock',     icon: MdListAlt,              label: 'Stock View',  roles: STOCK_ROLES },
-  // ── Admin section ────────────────────────────────────────────
-  { divider: true,    label: 'Management',          roles: ADMIN },
-  { to: '/medicines', icon: MdMedication,           label: 'Medicines',   roles: ADMIN },
-  { to: '/suppliers', icon: MdLocalShipping,        label: 'Suppliers',   roles: ADMIN },
-  { to: '/inventory', icon: MdInventory2,           label: 'Inventory',   roles: ADMIN },
-  { to: '/sales',     icon: MdShoppingCart,         label: 'Sales',       roles: ADMIN },
-  { to: '/analytics', icon: MdBarChart,             label: 'Reports',     roles: ADMIN },
-  { to: '/users',     icon: MdSupervisedUserCircle, label: 'Users',       roles: ADMIN },
-  { to: '/settings',  icon: MdSettings,             label: 'Settings',    roles: ADMIN },
+  { to: '/dashboard',      icon: MdDashboard,           label: 'Dashboard',       roles: null        },
+  { to: '/pos',            icon: MdPointOfSale,          label: 'POS',             roles: POS_ROLES   },
+  { to: '/stock',          icon: MdListAlt,              label: 'Stock View',      roles: STOCK_ROLES },
+  { to: '/online-orders',  icon: MdShoppingBag,          label: 'Online Orders',   roles: ORDER_ROLES },
+  { divider: true,         label: 'Management',          roles: ADMIN              },
+  { to: '/medicines',      icon: MdMedication,           label: 'Medicines',       roles: ADMIN       },
+  { to: '/suppliers',      icon: MdLocalShipping,        label: 'Suppliers',       roles: ADMIN       },
+  { to: '/inventory',      icon: MdInventory2,           label: 'Inventory',       roles: ADMIN       },
+  { to: '/sales',          icon: MdShoppingCart,         label: 'Sales',           roles: ADMIN       },
+  { to: '/analytics',      icon: MdBarChart,             label: 'Reports',         roles: ADMIN       },
+  { to: '/users',          icon: MdSupervisedUserCircle, label: 'Users',           roles: ADMIN       },
+  { to: '/settings',       icon: MdSettings,             label: 'Settings',        roles: ADMIN       },
 ];
 
 const ROLE_BADGE = {
@@ -53,23 +52,19 @@ export default function Sidebar({ open, onClose }) {
 
   return (
     <>
-      {/* Mobile overlay — closes sidebar when clicking outside */}
+      {/* Dark overlay shown on mobile when sidebar is open — clicking closes it */}
       {open && (
         <div
+          className="sidebar-overlay"
           onClick={onClose}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            zIndex: 39,
-            display: typeof window !== 'undefined' && window.innerWidth < 768 ? 'block' : 'none',
-          }}
         />
       )}
 
+      {/* Sidebar panel — always 260px wide; slides in/out via transform */}
       <aside style={{
         position: 'fixed',
         top: 0, left: 0,
-        width: 'var(--sidebar-w)',
+        width: '260px',          /* hardcoded — never collapses on mobile */
         height: '100vh',
         background: 'var(--surface)',
         borderRight: '1px solid var(--border)',
@@ -82,15 +77,23 @@ export default function Sidebar({ open, onClose }) {
         overflowX: 'hidden',
       }}>
 
-        {/* ── Logo ── */}
+        {/* ── Logo + close button on mobile ── */}
         <div style={{ padding: '1.25rem 1.25rem 1rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '.75rem', flexShrink: 0 }}>
           <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#10b981,#06b6d4)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <MdHealthAndSafety style={{ color: '#fff', fontSize: 22 }} />
           </div>
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontFamily: 'var(--font-head)', fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>Som Care</div>
-            <div style={{ fontSize: 10, color: 'var(--primary)', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>Pharmacy ERP</div>
+            <div style={{ fontSize: 10, color: 'var(--primary)', fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase' }}>Pharmacy</div>
           </div>
+          {/* Close button — visible only on mobile */}
+          <button
+            onClick={onClose}
+            className="sidebar-close-btn"
+            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', padding: 4, flexShrink: 0 }}
+          >
+            <MdClose style={{ fontSize: 20 }} />
+          </button>
         </div>
 
         {/* ── User card ── */}
@@ -109,7 +112,7 @@ export default function Sidebar({ open, onClose }) {
         </div>
 
         {/* ── Navigation ── */}
-        <nav style={{ flex: 1, padding: '.75rem .75rem', overflowY: 'auto' }}>
+        <nav style={{ flex: 1, padding: '.75rem', overflowY: 'auto' }}>
           {visible.map((item, idx) => {
             if (item.divider) {
               return (
@@ -128,7 +131,7 @@ export default function Sidebar({ open, onClose }) {
                 key={item.to}
                 to={item.to}
                 end={item.to === '/'}
-                onClick={() => { if (typeof window !== 'undefined' && window.innerWidth < 768) onClose(); }}
+                onClick={() => { if (window.innerWidth < 768) onClose(); }}
                 style={{
                   display: 'flex', alignItems: 'center', gap: '.75rem',
                   padding: '.65rem .75rem', borderRadius: 10, marginBottom: 2,

@@ -88,4 +88,19 @@ const toggleStatus = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getAll, getOne, create, update, toggleStatus };
+const deleteUser = async (req, res, next) => {
+  try {
+    const target = await prisma.user.findUnique({ where: { id: parseInt(req.params.id) } });
+    if (!target) return error(res, 'User not found', 404);
+    if (target.id === req.user.id) return error(res, 'Cannot delete your own account', 400);
+
+    // Check for linked sales records (cashierId is the FK)
+    const salesCount = await prisma.sale.count({ where: { cashierId: target.id } });
+    if (salesCount > 0) return error(res, `Cannot delete — user has ${salesCount} sale record(s). Deactivate instead.`, 409);
+
+    await prisma.user.delete({ where: { id: target.id } });
+    return success(res, null, 'User deleted');
+  } catch (err) { next(err); }
+};
+
+module.exports = { getAll, getOne, create, update, toggleStatus, deleteUser };

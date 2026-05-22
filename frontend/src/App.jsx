@@ -14,9 +14,10 @@ const StockView  = lazy(() => import('./pages/StockView'));
 const Inventory  = lazy(() => import('./pages/Inventory'));
 const Suppliers  = lazy(() => import('./pages/Suppliers'));
 const Sales      = lazy(() => import('./pages/Sales'));
-const Analytics  = lazy(() => import('./pages/Analytics'));
-const Users      = lazy(() => import('./pages/Users'));
-const Settings   = lazy(() => import('./pages/Settings'));
+const Analytics     = lazy(() => import('./pages/Analytics'));
+const Users         = lazy(() => import('./pages/Users'));
+const Settings      = lazy(() => import('./pages/Settings'));
+const OnlineOrders  = lazy(() => import('./pages/OnlineOrders'));
 
 // Public / customer pages
 const Landing          = lazy(() => import('./pages/Landing'));
@@ -24,11 +25,13 @@ const Shop             = lazy(() => import('./pages/Shop'));
 const CustomerRegister = lazy(() => import('./pages/CustomerRegister'));
 const MyOrders         = lazy(() => import('./pages/MyOrders'));
 
-const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN'];
-const POS_ROLES   = ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST', 'CASHIER'];
-const STOCK_ROLES = ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST'];
-const STAFF_ROLES = ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST', 'CASHIER'];
+const ADMIN_ROLES  = ['SUPER_ADMIN', 'ADMIN'];
+const POS_ROLES    = ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST', 'CASHIER'];
+const STOCK_ROLES  = ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST'];
+const STAFF_ROLES  = ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST', 'CASHIER'];
+const ORDER_ROLES  = ['SUPER_ADMIN', 'ADMIN', 'PHARMACIST'];
 
+// Requires auth; optionally restricts by role
 const ProtectedRoute = ({ children, roles }) => {
   const { user, loading } = useAuth();
   if (loading) return <FullPageSpinner />;
@@ -46,6 +49,14 @@ const RootRedirect = () => {
   return <Dashboard />;
 };
 
+// Shop routes are for guests and customers only — staff go to their dashboard
+const CustomerRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) return <FullPageSpinner />;
+  if (user && STAFF_ROLES.includes(user.role)) return <Navigate to="/dashboard" replace />;
+  return children;
+};
+
 export default function App() {
   const { loading } = useAuth();
   if (loading) return <FullPageSpinner />;
@@ -60,8 +71,8 @@ export default function App() {
 
         {/* ── Public / Customer shop (ShopLayout top-nav) ────────────── */}
         <Route element={<ShopLayout />}>
-          <Route path="/"        element={<RootRedirect />} />
-          <Route path="/shop"    element={<Shop />} />
+          <Route path="/"          element={<RootRedirect />} />
+          <Route path="/shop"      element={<CustomerRoute><Shop /></CustomerRoute>} />
           <Route path="/my-orders" element={
             <ProtectedRoute roles={['CUSTOMER']}><MyOrders /></ProtectedRoute>
           } />
@@ -71,7 +82,8 @@ export default function App() {
         <Route element={<ProtectedRoute roles={STAFF_ROLES}><AppLayout /></ProtectedRoute>}>
           <Route path="/dashboard"  element={<Dashboard />} />
           <Route path="/pos"        element={<ProtectedRoute roles={POS_ROLES}><POS /></ProtectedRoute>} />
-          <Route path="/stock"      element={<ProtectedRoute roles={STOCK_ROLES}><StockView /></ProtectedRoute>} />
+          <Route path="/stock"         element={<ProtectedRoute roles={STOCK_ROLES}><StockView /></ProtectedRoute>} />
+          <Route path="/online-orders" element={<ProtectedRoute roles={ORDER_ROLES}><OnlineOrders /></ProtectedRoute>} />
           <Route path="/medicines"  element={<ProtectedRoute roles={ADMIN_ROLES}><Medicines /></ProtectedRoute>} />
           <Route path="/inventory"  element={<ProtectedRoute roles={ADMIN_ROLES}><Inventory /></ProtectedRoute>} />
           <Route path="/sales"      element={<ProtectedRoute roles={ADMIN_ROLES}><Sales /></ProtectedRoute>} />

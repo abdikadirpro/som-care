@@ -1,28 +1,29 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MdSearch, MdClose, MdAdd, MdRemove, MdDelete,
-  MdShoppingCart, MdArrowForward, MdCheck, MdContentCopy,
+  MdShoppingCart, MdArrowForward, MdCheck, MdUpload,
+  MdDescription, MdWarning,
 } from 'react-icons/md';
 import { GiPill, GiMedicinePills } from 'react-icons/gi';
-
-const BACKEND = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '');
-const imgUrl = (url) => {
-  if (!url) return null;
-  return url.startsWith('http') ? url : `${BACKEND}${url}`;
-};
 import { useAuth } from '../context/AuthContext';
 import { useShopCart } from '../context/ShopCartContext';
 import api from '../utils/api';
 import { formatCurrency } from '../utils/formatters';
 import toast from 'react-hot-toast';
 
+const BACKEND = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '');
+const imgUrl = (url) => {
+  if (!url) return null;
+  return url.startsWith('http') ? url : `${BACKEND}${url}`;
+};
+
 const PAYMENT_METHODS = [
-  { id: 'EVC_PLUS',  label: 'EVC Plus',       emoji: '🔴', number: '252-61-xxx-xxxx' },
-  { id: 'TELEBIRR',  label: 'Telebirr',        emoji: '🟠', number: '*127# then pay' },
-  { id: 'ZAAD',      label: 'Zaad',            emoji: '🟢', number: '*136# then pay' },
-  { id: 'CBE_BIRR',  label: 'CBE Birr',        emoji: '🔵', number: '*847# then pay' },
-  { id: 'CASH',      label: 'Cash on Delivery', emoji: '💵', number: null },
+  { id: 'EVC_PLUS',  label: 'EVC Plus',        emoji: '🔴', number: '252-61-xxx-xxxx' },
+  { id: 'TELEBIRR',  label: 'Telebirr',         emoji: '🟠', number: '*127# then pay'  },
+  { id: 'ZAAD',      label: 'Zaad',             emoji: '🟢', number: '*136# then pay'  },
+  { id: 'CBE_BIRR',  label: 'CBE Birr',         emoji: '🔵', number: '*847# then pay'  },
+  { id: 'CASH',      label: 'Cash on Delivery',  emoji: '💵', number: null              },
 ];
 
 export default function Shop() {
@@ -30,19 +31,27 @@ export default function Shop() {
   const { items, addItem, updateQty, removeItem, clearCart, total, count } = useShopCart();
   const navigate = useNavigate();
 
-  const [medicines, setMedicines]     = useState([]);
-  const [categories, setCategories]   = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [search, setSearch]           = useState('');
-  const [activeCat, setActiveCat]     = useState(null);
-  const [pagination, setPagination]   = useState({ total: 0, page: 1, pages: 1 });
-  const [cartOpen, setCartOpen]       = useState(false);
+  const [medicines, setMedicines]       = useState([]);
+  const [categories, setCategories]     = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [search, setSearch]             = useState('');
+  const [activeCat, setActiveCat]       = useState(null);
+  const [pagination, setPagination]     = useState({ total: 0, page: 1, pages: 1 });
+  const [cartOpen, setCartOpen]         = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
-  // Checkout form
+  // Checkout form state
   const [form, setForm] = useState({ address: '', phone: '', paymentMethod: 'CASH', reference: '', notes: '' });
-  const [placing, setPlacing] = useState(false);
-  const [ordered, setOrdered] = useState(null);
+  const [placing, setPlacing]       = useState(false);
+  const [ordered, setOrdered]       = useState(null);
+
+  // Prescription upload state
+  const [rxFile, setRxFile]         = useState(null);         // File object
+  const [rxPreview, setRxPreview]   = useState(null);         // local object URL
+  const [rxUploading, setRxUploading] = useState(false);
+  const rxInputRef = useRef(null);
+
+  const rxRequired = items.some(i => i.prescriptionRequired);
 
   const load = useCallback(async (page = 1) => {
     setLoading(true);
@@ -65,10 +74,25 @@ export default function Shop() {
     return () => clearTimeout(t);
   }, [load]);
 
+  // Clean up object URL when component unmounts or file changes
+  useEffect(() => {
+    return () => { if (rxPreview) URL.revokeObjectURL(rxPreview); };
+  }, [rxPreview]);
+
   const handleAddToCart = (med) => {
     addItem(med);
     toast.success(`Added ${med.name}`, { icon: '💊' });
     setCartOpen(true);
+  };
+
+  const handleRxFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please upload an image file'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast.error('File must be under 10 MB'); return; }
+    if (rxPreview) URL.revokeObjectURL(rxPreview);
+    setRxFile(file);
+    setRxPreview(URL.createObjectURL(file));
   };
 
   const handleCheckout = () => {
@@ -80,21 +104,41 @@ export default function Shop() {
 
   const handlePlaceOrder = async () => {
     if (!form.address.trim()) { toast.error('Delivery address is required'); return; }
+    if (rxRequired && !rxFile) { toast.error('Please upload your prescription'); return; }
+
     setPlacing(true);
     try {
+      // Upload prescription first if needed
+      let prescriptionUrl = null;
+      if (rxRequired && rxFile) {
+        setRxUploading(true);
+        const fd = new FormData();
+        fd.append('prescription', rxFile);
+        const { data: upData } = await api.post('/shop/upload-prescription', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        prescriptionUrl = upData.data?.url;
+        setRxUploading(false);
+      }
+
       const { data } = await api.post('/shop/orders', {
         items: items.map(i => ({ medicineId: i.medicineId, quantity: i.quantity })),
-        paymentMethod: form.paymentMethod,
-        deliveryAddress: form.address,
-        phone: form.phone,
+        paymentMethod:    form.paymentMethod,
+        deliveryAddress:  form.address,
+        phone:            form.phone,
         paymentReference: form.reference,
-        notes: form.notes,
+        notes:            form.notes,
+        prescriptionUrl,
       });
+
       setOrdered(data.data);
       clearCart();
+      setRxFile(null);
+      setRxPreview(null);
       setCheckoutOpen(false);
       toast.success('Order placed successfully! 🎉');
     } catch (err) {
+      setRxUploading(false);
       toast.error(err.response?.data?.message || 'Order failed');
     } finally { setPlacing(false); }
   };
@@ -192,7 +236,7 @@ export default function Shop() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
           <div onClick={() => setCartOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(4px)' }} />
           <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: 420, background: '#111827', borderLeft: '1px solid rgba(255,255,255,.08)', display: 'flex', flexDirection: 'column', animation: 'slideRight .22s ease' }}>
-            {/* Drawer header */}
+            {/* Header */}
             <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
                 <MdShoppingCart style={{ color: '#10b981', fontSize: 20 }} />
@@ -208,6 +252,14 @@ export default function Shop() {
                 </button>
               </div>
             </div>
+
+            {/* Rx warning banner */}
+            {rxRequired && (
+              <div style={{ padding: '.65rem 1.25rem', background: 'rgba(245,158,11,.08)', borderBottom: '1px solid rgba(245,158,11,.15)', display: 'flex', alignItems: 'center', gap: '.5rem', fontSize: 12, color: '#f59e0b', fontWeight: 600 }}>
+                <MdWarning style={{ fontSize: 16, flexShrink: 0 }} />
+                Some items require a prescription — you'll upload it at checkout.
+              </div>
+            )}
 
             {/* Cart items */}
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '1rem' }}>
@@ -244,9 +296,10 @@ export default function Shop() {
       {checkoutOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div onClick={() => setCheckoutOpen(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.7)', backdropFilter: 'blur(6px)' }} />
-          <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#111827', border: '1px solid rgba(255,255,255,.1)', borderRadius: 20, width: '100%', maxWidth: 500, maxHeight: '90vh', overflowY: 'auto', animation: 'confirm-pop .2s ease' }}>
+          <div onClick={e => e.stopPropagation()} style={{ position: 'relative', background: '#111827', border: '1px solid rgba(255,255,255,.1)', borderRadius: 20, width: '100%', maxWidth: 520, maxHeight: '92vh', overflowY: 'auto', animation: 'confirm-pop .2s ease' }}>
+
             {/* Header */}
-            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, background: '#111827', zIndex: 1 }}>
               <h3 style={{ fontSize: 17, fontWeight: 800, color: '#fff' }}>Checkout</h3>
               <button onClick={() => setCheckoutOpen(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.4)', cursor: 'pointer', display: 'flex' }}>
                 <MdClose style={{ fontSize: 20 }} />
@@ -254,13 +307,19 @@ export default function Shop() {
             </div>
 
             <div style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+
               {/* Order summary */}
               <div style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.06)', borderRadius: 12, padding: '1rem' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.35)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: '.6rem' }}>Order Summary</div>
                 {items.map(i => (
-                  <div key={i.medicineId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: '.35rem', color: 'rgba(255,255,255,.7)' }}>
-                    <span>{i.name} × {i.quantity}</span>
-                    <span style={{ fontWeight: 700 }}>{formatCurrency(i.price * i.quantity)}</span>
+                  <div key={i.medicineId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: '.35rem', color: 'rgba(255,255,255,.7)', gap: '.5rem' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '.35rem' }}>
+                      {i.name} × {i.quantity}
+                      {i.prescriptionRequired && (
+                        <span style={{ fontSize: 9, fontWeight: 800, color: '#f59e0b', background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.2)', borderRadius: 4, padding: '1px 5px' }}>Rx</span>
+                      )}
+                    </span>
+                    <span style={{ fontWeight: 700, flexShrink: 0 }}>{formatCurrency(i.price * i.quantity)}</span>
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 15, fontWeight: 900, marginTop: '.6rem', paddingTop: '.6rem', borderTop: '1px solid rgba(255,255,255,.06)', color: '#10b981' }}>
@@ -269,9 +328,47 @@ export default function Shop() {
                 </div>
               </div>
 
+              {/* ── PRESCRIPTION UPLOAD ── */}
+              {rxRequired && (
+                <div style={{ background: 'rgba(245,158,11,.06)', border: `1px solid ${rxFile ? 'rgba(16,185,129,.3)' : 'rgba(245,158,11,.25)'}`, borderRadius: 14, padding: '1rem', display: 'flex', flexDirection: 'column', gap: '.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '.5rem' }}>
+                    <MdDescription style={{ color: '#f59e0b', fontSize: 18, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Prescription Required <span style={{ color: '#ef4444' }}>*</span></div>
+                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,.45)', marginTop: 1 }}>One or more items need a doctor's prescription. Upload a clear photo or scan.</div>
+                    </div>
+                  </div>
+
+                  {/* File input trigger */}
+                  <input ref={rxInputRef} type="file" accept="image/*" onChange={handleRxFileChange} style={{ display: 'none' }} />
+
+                  {rxPreview ? (
+                    <div style={{ position: 'relative', borderRadius: 10, overflow: 'hidden', border: '1px solid rgba(16,185,129,.3)' }}>
+                      <img src={rxPreview} alt="Prescription preview" style={{ width: '100%', maxHeight: 200, objectFit: 'contain', background: 'rgba(0,0,0,.3)', display: 'block' }} />
+                      <button
+                        onClick={() => { setRxFile(null); URL.revokeObjectURL(rxPreview); setRxPreview(null); if (rxInputRef.current) rxInputRef.current.value = ''; }}
+                        style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,.7)', border: 'none', borderRadius: '50%', width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+                        <MdClose style={{ fontSize: 14 }} />
+                      </button>
+                      <div style={{ padding: '.5rem .75rem', background: 'rgba(16,185,129,.1)', fontSize: 11, color: '#10b981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '.35rem' }}>
+                        <MdCheck style={{ fontSize: 14 }} /> Prescription ready to upload
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => rxInputRef.current?.click()}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.5rem', padding: '.75rem', borderRadius: 10, border: '1.5px dashed rgba(245,158,11,.4)', background: 'rgba(245,158,11,.05)', color: '#f59e0b', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all .15s', width: '100%' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(245,158,11,.1)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(245,158,11,.05)'}>
+                      <MdUpload style={{ fontSize: 20 }} />
+                      Upload Prescription (JPG / PNG)
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Delivery info */}
               <div>
-                <label style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.6)', display: 'block', marginBottom: '.4rem' }}>Delivery Address *</label>
+                <label style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,.6)', display: 'block', marginBottom: '.4rem' }}>Delivery Address <span style={{ color: '#ef4444' }}>*</span></label>
                 <textarea className="input" rows={2} placeholder="Your full delivery address…"
                   value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
                   style={{ resize: 'none', fontSize: 13 }} />
@@ -295,15 +392,15 @@ export default function Shop() {
                 </div>
               </div>
 
-              {/* Payment instructions for digital payments */}
-              {selectedPayment && selectedPayment.number && (
+              {/* Payment instructions */}
+              {selectedPayment?.number && (
                 <div style={{ background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.2)', borderRadius: 12, padding: '1rem' }}>
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#10b981', marginBottom: '.4rem' }}>
                     {selectedPayment.emoji} How to pay via {selectedPayment.label}:
                   </div>
                   <ol style={{ fontSize: 12, color: 'rgba(255,255,255,.6)', paddingLeft: '1.1rem', lineHeight: 2 }}>
                     <li>Dial <strong style={{ color: '#fff' }}>{selectedPayment.number}</strong></li>
-                    <li>Send <strong style={{ color: '#10b981' }}>{formatCurrency(total)}</strong> to merchant number: <strong style={{ color: '#fff' }}>+252 61 000 0000</strong></li>
+                    <li>Send <strong style={{ color: '#10b981' }}>{formatCurrency(total)}</strong> to merchant: <strong style={{ color: '#fff' }}>+252 61 000 0000</strong></li>
                     <li>Enter the transaction reference below</li>
                   </ol>
                   <input className="input" placeholder="Transaction reference / code" style={{ marginTop: '.5rem', fontSize: 13 }}
@@ -324,10 +421,12 @@ export default function Shop() {
               </div>
 
               {/* Place order button */}
-              <button onClick={handlePlaceOrder} disabled={placing}
+              <button onClick={handlePlaceOrder} disabled={placing || rxUploading}
                 style={{ width: '100%', padding: '.8rem', borderRadius: 12, background: '#10b981', color: '#fff', fontWeight: 800, fontSize: 15, border: 'none', cursor: placing ? 'default' : 'pointer', opacity: placing ? .7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '.5rem', boxShadow: '0 4px 16px rgba(16,185,129,.35)' }}>
-                {placing
-                  ? <><span style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin .7s linear infinite', display: 'inline-block' }} /> Placing Order…</>
+                {rxUploading
+                  ? <><Spinner /> Uploading prescription…</>
+                  : placing
+                  ? <><Spinner /> Placing Order…</>
                   : <><MdCheck style={{ fontSize: 18 }} /> Place Order — {formatCurrency(total)}</>
                 }
               </button>
@@ -365,75 +464,89 @@ export default function Shop() {
       )}
 
       <style>{`
-        @keyframes slideRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes slideRight  { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes spin        { to   { transform: rotate(360deg); } }
         @keyframes confirm-pop { from { opacity: 0; transform: scale(.9); } to { opacity: 1; transform: scale(1); } }
-        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar       { width: 4px; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.1); border-radius: 4px; }
       `}</style>
     </div>
   );
 }
 
+/* ── Spinner helper ─────────────────────────────────────────────────────── */
+function Spinner() {
+  return <span style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin .7s linear infinite', display: 'inline-block', flexShrink: 0 }} />;
+}
+
+/* ── Shop medicine card ─────────────────────────────────────────────────── */
 function ShopMedicineCard({ med, onAdd }) {
   const [imgErr, setImgErr] = useState(false);
-  const photo = imgUrl(med.imageUrl);
-  const initials = med.name.split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+  const photo   = imgUrl(med.imageUrl);
+  const initials = med.name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 
   return (
     <div
-      style={{ background:'rgba(255,255,255,.03)', border:'1px solid rgba(255,255,255,.08)', borderRadius:16, overflow:'hidden', display:'flex', flexDirection:'column', transition:'all .18s', cursor:'default' }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor='rgba(16,185,129,.35)'; e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow='0 8px 24px rgba(16,185,129,.12)'; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor='rgba(255,255,255,.08)'; e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='none'; }}>
+      style={{ background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 16, overflow: 'hidden', display: 'flex', flexDirection: 'column', transition: 'all .18s', cursor: 'default' }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(16,185,129,.35)'; e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(16,185,129,.12)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,.08)'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none'; }}>
 
       {/* Image area */}
-      <div style={{ position:'relative', width:'100%', height:150, background:'linear-gradient(135deg,#0d2e1a,#0a1f2e)', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden', flexShrink:0 }}>
+      <div style={{ position: 'relative', width: '100%', height: 150, background: 'linear-gradient(135deg,#0d2e1a,#0a1f2e)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
         {photo && !imgErr
-          ? <img src={photo} alt={med.name} onError={() => setImgErr(true)}
-              style={{ width:'100%', height:'100%', objectFit:'cover', display:'block' }} />
+          ? <img src={photo} alt={med.name} onError={() => setImgErr(true)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           : <>
-              <div style={{ position:'absolute', width:100, height:100, borderRadius:'50%', border:'1px solid rgba(16,185,129,.12)', top:'50%', left:'50%', transform:'translate(-50%,-50%)' }} />
-              <div style={{ position:'absolute', width:65, height:65, borderRadius:'50%', border:'1px solid rgba(16,185,129,.18)', top:'50%', left:'50%', transform:'translate(-50%,-50%)' }} />
-              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'.2rem', zIndex:1 }}>
-                <div style={{ width:42, height:42, borderRadius:'50%', background:'rgba(16,185,129,.15)', border:'2px solid rgba(16,185,129,.25)', display:'flex', alignItems:'center', justifyContent:'center' }}>
-                  <GiMedicinePills style={{ color:'#10b981', fontSize:22 }} />
+              <div style={{ position: 'absolute', width: 100, height: 100, borderRadius: '50%', border: '1px solid rgba(16,185,129,.12)', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
+              <div style={{ position: 'absolute', width: 65, height: 65, borderRadius: '50%', border: '1px solid rgba(16,185,129,.18)', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '.2rem', zIndex: 1 }}>
+                <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(16,185,129,.15)', border: '2px solid rgba(16,185,129,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <GiMedicinePills style={{ color: '#10b981', fontSize: 22 }} />
                 </div>
-                <span style={{ fontSize:10, fontWeight:900, color:'rgba(255,255,255,.3)', letterSpacing:1 }}>{initials}</span>
+                <span style={{ fontSize: 10, fontWeight: 900, color: 'rgba(255,255,255,.3)', letterSpacing: 1 }}>{initials}</span>
               </div>
             </>
         }
+
         {/* Stock badge */}
-        <div style={{ position:'absolute', top:8, right:8, background:'rgba(0,0,0,.55)', backdropFilter:'blur(6px)', color:'#10b981', fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:99 }}>
+        <div style={{ position: 'absolute', top: 8, right: 8, background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(6px)', color: '#10b981', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99 }}>
           {med.stockQuantity} left
         </div>
+
         {/* Featured star */}
         {med.featured && (
-          <div style={{ position:'absolute', top:8, left:8, background:'linear-gradient(90deg,#f59e0b,#f97316)', color:'#fff', fontSize:8, fontWeight:800, padding:'2px 6px', borderRadius:99 }}>★ Featured</div>
+          <div style={{ position: 'absolute', top: 8, left: 8, background: 'linear-gradient(90deg,#f59e0b,#f97316)', color: '#fff', fontSize: 8, fontWeight: 800, padding: '2px 6px', borderRadius: 99 }}>★ Featured</div>
+        )}
+
+        {/* Rx badge */}
+        {med.prescriptionRequired && (
+          <div style={{ position: 'absolute', bottom: 8, left: 8, background: 'rgba(239,68,68,.85)', backdropFilter: 'blur(4px)', color: '#fff', fontSize: 9, fontWeight: 800, padding: '2px 7px', borderRadius: 99, letterSpacing: .3 }}>
+            Rx Required
+          </div>
         )}
       </div>
 
       {/* Info */}
-      <div style={{ padding:'.8rem .9rem', flex:1, display:'flex', flexDirection:'column', gap:'.25rem' }}>
+      <div style={{ padding: '.8rem .9rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '.25rem' }}>
         {med.category && (
-          <span style={{ fontSize:9, fontWeight:700, color:'#06b6d4', textTransform:'uppercase', letterSpacing:.8 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: '#06b6d4', textTransform: 'uppercase', letterSpacing: .8 }}>
             {med.category.icon} {med.category.name}
           </span>
         )}
-        <div style={{ fontSize:12, fontWeight:800, color:'#fff', lineHeight:1.35, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', minHeight:30 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: '#fff', lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: 30 }}>
           {med.name}
         </div>
-        {(med.form||med.strength) && (
-          <div style={{ fontSize:10, color:'rgba(255,255,255,.35)' }}>
-            {[med.form,med.strength].filter(Boolean).join(' · ')}
+        {(med.form || med.strength) && (
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,.35)' }}>
+            {[med.form, med.strength].filter(Boolean).join(' · ')}
           </div>
         )}
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'auto', paddingTop:'.5rem' }}>
-          <span style={{ fontSize:15, fontWeight:900, color:'#10b981' }}>{formatCurrency(med.retailPrice)}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '.5rem' }}>
+          <span style={{ fontSize: 15, fontWeight: 900, color: '#10b981' }}>{formatCurrency(med.retailPrice)}</span>
           <button onClick={onAdd}
-            style={{ width:34, height:34, borderRadius:10, background:'#10b981', color:'#fff', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', boxShadow:'0 2px 10px rgba(16,185,129,.35)', transition:'transform .1s' }}
-            onMouseEnter={e => e.currentTarget.style.transform='scale(1.1)'}
-            onMouseLeave={e => e.currentTarget.style.transform='scale(1)'}>
-            <MdAdd style={{ fontSize:18 }} />
+            style={{ width: 34, height: 34, borderRadius: 10, background: '#10b981', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(16,185,129,.35)', transition: 'transform .1s' }}
+            onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
+            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+            <MdAdd style={{ fontSize: 18 }} />
           </button>
         </div>
       </div>
@@ -441,6 +554,7 @@ function ShopMedicineCard({ med, onAdd }) {
   );
 }
 
+/* ── Cart row ───────────────────────────────────────────────────────────── */
 function CartRow({ item, onQty, onRemove }) {
   return (
     <div style={{ background: 'rgba(255,255,255,.04)', border: '1px solid rgba(255,255,255,.07)', borderRadius: 12, padding: '.75rem', display: 'flex', gap: '.75rem', alignItems: 'center', marginBottom: '.5rem' }}>
@@ -448,7 +562,12 @@ function CartRow({ item, onQty, onRemove }) {
         <GiPill style={{ color: '#10b981', fontSize: 18 }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '.35rem' }}>
+          {item.name}
+          {item.prescriptionRequired && (
+            <span style={{ fontSize: 9, fontWeight: 800, color: '#f59e0b', background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.2)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>Rx</span>
+          )}
+        </div>
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,.5)', marginTop: 2 }}>{formatCurrency(item.price)} each</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', marginTop: '.4rem' }}>
           <button onClick={() => onQty(item.medicineId, item.quantity - 1)}

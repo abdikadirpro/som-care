@@ -253,6 +253,8 @@ model Sale {
   paymentStatus PaymentStatus @default(PAID) @map("payment_status")
   status        SaleStatus    @default(COMPLETED)
   notes         String?       @db.Text
+  prescriptionUrl String?     @map("prescription_url") @db.Text
+  onlineStatus  String?       @map("online_status")
   createdAt     DateTime      @default(now()) @map("created_at")
 
   customer      Customer?     @relation(fields: [customerId], references: [id])

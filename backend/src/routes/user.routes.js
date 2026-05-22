@@ -8,5 +8,6 @@ router.get('/:id', authenticate, ctrl.getOne);
 router.post('/', authenticate, authorize('SUPER_ADMIN','ADMIN'), ctrl.create);
 router.put('/:id', authenticate, uploadAvatar.single('avatar'), ctrl.update);
 router.patch('/:id/toggle-status', authenticate, authorize('SUPER_ADMIN','ADMIN'), ctrl.toggleStatus);
+router.delete('/:id',             authenticate, authorize('SUPER_ADMIN'),          ctrl.deleteUser);
 
 module.exports = router;

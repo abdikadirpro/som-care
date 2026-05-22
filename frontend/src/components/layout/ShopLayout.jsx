@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
 import {
   MdHealthAndSafety, MdShoppingCart, MdMenu, MdClose,
@@ -16,6 +16,16 @@ export default function ShopLayout() {
   const navigate   = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropOpen, setDropOpen] = useState(false);
+  const dropRef = useRef(null);
+
+  // Close user dropdown when clicking outside (works on touch too)
+  useEffect(() => {
+    if (!dropOpen) return;
+    const handle = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setDropOpen(false); };
+    document.addEventListener('mousedown', handle);
+    document.addEventListener('touchstart', handle);
+    return () => { document.removeEventListener('mousedown', handle); document.removeEventListener('touchstart', handle); };
+  }, [dropOpen]);
 
   const isCustomer = user?.role === 'CUSTOMER';
   const isStaff    = STAFF_ROLES.includes(user?.role);
@@ -110,7 +120,7 @@ export default function ShopLayout() {
 
           {user ? (
             /* User avatar dropdown */
-            <div style={{ position: 'relative' }}>
+            <div ref={dropRef} style={{ position: 'relative' }}>
               <button
                 onClick={() => setDropOpen(p => !p)}
                 style={{ display: 'flex', alignItems: 'center', gap: '.4rem', padding: '.35rem .65rem', borderRadius: 9, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.08)', cursor: 'pointer', color: '#fff' }}
@@ -125,7 +135,6 @@ export default function ShopLayout() {
 
               {dropOpen && (
                 <div
-                  onMouseLeave={() => setDropOpen(false)}
                   style={{
                     position: 'absolute', top: '110%', right: 0,
                     background: '#1f2937', border: '1px solid rgba(255,255,255,.1)',
@@ -163,7 +172,7 @@ export default function ShopLayout() {
               )}
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: '.4rem' }}>
+            <div className="desktop-nav" style={{ display: 'flex', gap: '.4rem' }}>
               <Link to="/login"
                 style={{ padding: '.38rem .85rem', borderRadius: 8, fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.8)', textDecoration: 'none', border: '1px solid rgba(255,255,255,.12)', background: 'transparent' }}>
                 Login
@@ -175,16 +184,60 @@ export default function ShopLayout() {
             </div>
           )}
 
-          {/* Mobile burger */}
+          {/* Mobile burger — visibility controlled by CSS, not inline style */}
           <button
             onClick={() => setMenuOpen(p => !p)}
-            style={{ display: 'none', background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}
             className="mobile-burger"
+            style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', padding: 4 }}
           >
             {menuOpen ? <MdClose style={{ fontSize: 22 }} /> : <MdMenu style={{ fontSize: 22 }} />}
           </button>
         </div>
       </nav>
+
+      {/* ── Mobile nav drawer ──────────────────────────────────────────── */}
+      {menuOpen && (
+        <div style={{
+          position: 'fixed', top: 62, left: 0, right: 0,
+          background: 'rgba(13,21,38,0.98)', backdropFilter: 'blur(12px)',
+          borderBottom: '1px solid rgba(255,255,255,.07)',
+          zIndex: 49, padding: '.75rem 1.25rem', display: 'flex', flexDirection: 'column', gap: 4,
+        }}>
+          {[
+            { to: '/', label: 'Home', end: true },
+            { to: '/shop', label: 'Shop' },
+          ].map(link => (
+            <NavLink key={link.to} to={link.to} end={link.end} onClick={() => setMenuOpen(false)}
+              style={({ isActive }) => ({
+                padding: '.65rem .85rem', borderRadius: 9, fontSize: 14, fontWeight: 600,
+                textDecoration: 'none', display: 'block',
+                color: isActive ? '#10b981' : 'rgba(255,255,255,.8)',
+                background: isActive ? 'rgba(16,185,129,.1)' : 'transparent',
+              })}>{link.label}</NavLink>
+          ))}
+          {isCustomer && (
+            <NavLink to="/my-orders" onClick={() => setMenuOpen(false)}
+              style={({ isActive }) => ({
+                padding: '.65rem .85rem', borderRadius: 9, fontSize: 14, fontWeight: 600,
+                textDecoration: 'none', display: 'block',
+                color: isActive ? '#10b981' : 'rgba(255,255,255,.8)',
+                background: isActive ? 'rgba(16,185,129,.1)' : 'transparent',
+              })}>My Orders</NavLink>
+          )}
+          {isStaff && (
+            <NavLink to="/pos" onClick={() => setMenuOpen(false)}
+              style={{ padding: '.65rem .85rem', borderRadius: 9, fontSize: 14, fontWeight: 600, textDecoration: 'none', display: 'block', color: '#10b981', background: 'rgba(16,185,129,.08)' }}>
+              Dashboard
+            </NavLink>
+          )}
+          {!user && (
+            <div style={{ display: 'flex', gap: '.5rem', marginTop: '.25rem' }}>
+              <Link to="/login" onClick={() => setMenuOpen(false)} style={{ flex: 1, padding: '.6rem', borderRadius: 9, textAlign: 'center', fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,.8)', border: '1px solid rgba(255,255,255,.12)', textDecoration: 'none' }}>Login</Link>
+              <Link to="/register" onClick={() => setMenuOpen(false)} style={{ flex: 1, padding: '.6rem', borderRadius: 9, textAlign: 'center', fontSize: 13, fontWeight: 700, color: '#fff', textDecoration: 'none', background: '#10b981' }}>Register</Link>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Page content ────────────────────────────────────────────────── */}
       <main style={{ flex: 1 }}>
@@ -235,9 +288,10 @@ export default function ShopLayout() {
       </footer>
 
       <style>{`
+        .mobile-burger { display: none; }
         @media (max-width: 640px) {
           .desktop-nav { display: none !important; }
-          .mobile-burger { display: flex !important; }
+          .mobile-burger { display: flex; }
         }
       `}</style>
     </div>

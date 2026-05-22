@@ -10,14 +10,17 @@ import api from '../utils/api';
 import { formatCurrency } from '../utils/formatters';
 import toast from 'react-hot-toast';
 
+const BACKEND = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace('/api', '');
+const imgUrl  = (url) => { if (!url) return null; return url.startsWith('http') ? url : `${BACKEND}${url}`; };
+
 const PAYMENT_METHODS = [
-  { id: 'CASH',     label: 'Cash' },
+  { id: 'CASH',     label: 'Cash'     },
   { id: 'TELEBIRR', label: 'Telebirr' },
   { id: 'EVC_PLUS', label: 'EVC Plus' },
-  { id: 'ZAAD',     label: 'Zaad' },
+  { id: 'ZAAD',     label: 'Zaad'     },
   { id: 'CBE_BIRR', label: 'CBE Birr' },
-  { id: 'BANK',     label: 'Bank' },
-  { id: 'CARD',     label: 'Card' },
+  { id: 'BANK',     label: 'Bank'     },
+  { id: 'CARD',     label: 'Card'     },
 ];
 
 const CAT_COLORS = [
@@ -35,30 +38,29 @@ export default function POS() {
   } = useCart();
 
   const { confirm } = useConfirm();
-  const [customer, setCustomer]             = useState(null);
-  const [search, setSearch]                 = useState('');
-  const [categories, setCategories]         = useState([]);
-  const [activeCategory, setActiveCategory] = useState(null);
-  const [shelf, setShelf]                   = useState([]);
-  const [shelfLoading, setShelfLoading]     = useState(true);
-  const [paidAmount, setPaidAmount]         = useState('');
-  const [processing, setProcessing]         = useState(false);
-  const [lastReceipt, setLastReceipt]       = useState(null);
-  const [showReceipt, setShowReceipt]       = useState(false);
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [customers, setCustomers]           = useState([]);
+  const [customer, setCustomer]               = useState(null);
+  const [search, setSearch]                   = useState('');
+  const [categories, setCategories]           = useState([]);
+  const [activeCategory, setActiveCategory]   = useState(null);
+  const [shelf, setShelf]                     = useState([]);
+  const [shelfLoading, setShelfLoading]       = useState(true);
+  const [paidAmount, setPaidAmount]           = useState('');
+  const [processing, setProcessing]           = useState(false);
+  const [lastReceipt, setLastReceipt]         = useState(null);
+  const [showReceipt, setShowReceipt]         = useState(false);
+  const [customerSearch, setCustomerSearch]   = useState('');
+  const [customers, setCustomers]             = useState([]);
   const [showCustomerDrop, setShowCustomerDrop] = useState(false);
-  const [qtyModal, setQtyModal]             = useState(null); // medicine waiting for qty
+  // flash animation state: medicineId → timestamp
+  const [addedFlash, setAddedFlash] = useState({});
 
   const searchRef = useRef(null);
   const paidRef   = useRef(null);
 
-  // ── Load categories ───────────────────────────────────────────────────────
   useEffect(() => {
     api.get('/categories').then(r => setCategories(r.data.data || [])).catch(() => {});
   }, []);
 
-  // ── Load shelf ────────────────────────────────────────────────────────────
   const loadShelf = useCallback(async (categoryId = null, q = '') => {
     setShelfLoading(true);
     try {
@@ -70,20 +72,20 @@ export default function POS() {
     } catch {} finally { setShelfLoading(false); }
   }, []);
 
-  useEffect(() => { loadShelf(activeCategory, search); }, []); // initial
+  useEffect(() => { loadShelf(activeCategory, search); }, []);
 
   useEffect(() => {
     const t = setTimeout(() => loadShelf(activeCategory, search), 280);
     return () => clearTimeout(t);
   }, [search, activeCategory, loadShelf]);
 
-  // ── Barcode scan ──────────────────────────────────────────────────────────
   const handleBarcodeSearch = async () => {
     if (!search.trim()) return;
     try {
       const { data } = await api.get(`/medicines/barcode/${search.trim()}`);
       if (data.data?.stockQuantity > 0) {
-        setQtyModal(data.data);
+        addItem(data.data, 'PIECE', 1);
+        toast.success(`Added ${data.data.name}`, { icon: '💊' });
         setSearch('');
       } else {
         toast.error('Out of stock');
@@ -91,7 +93,15 @@ export default function POS() {
     } catch { toast.error('Medicine not found'); }
   };
 
-  // ── Customer search ───────────────────────────────────────────────────────
+  // Click on medicine card → add 1 directly, flash the card
+  const handleAddMedicine = (med) => {
+    if (med.stockQuantity <= 0) { toast.error('Out of stock'); return; }
+    addItem(med, 'PIECE', 1);
+    setAddedFlash(prev => ({ ...prev, [med.id]: Date.now() }));
+    setTimeout(() => setAddedFlash(prev => { const n = { ...prev }; delete n[med.id]; return n; }), 600);
+    toast.success(`${med.name} added`, { icon: '💊', duration: 1200 });
+  };
+
   const searchCustomers = useCallback(async (q) => {
     if (!q.trim()) { setCustomers([]); return; }
     try {
@@ -105,7 +115,6 @@ export default function POS() {
     return () => clearTimeout(t);
   }, [customerSearch, searchCustomers]);
 
-  // ── Checkout ──────────────────────────────────────────────────────────────
   const change = parseFloat(paidAmount || 0) - totalAmount;
 
   const handleCheckout = async () => {
@@ -177,8 +186,7 @@ export default function POS() {
         <div style={{ display: 'flex', gap: '.4rem', overflowX: 'auto', flexShrink: 0, paddingBottom: 4, scrollbarWidth: 'thin' }}>
           <CategoryTab
             name="All" icon="💊" count={totalCatCount}
-            color="#0f4c81"
-            active={activeCategory === null}
+            color="#0f4c81" active={activeCategory === null}
             onClick={() => setActiveCategory(null)}
           />
           {categories.map((cat, idx) => (
@@ -203,19 +211,17 @@ export default function POS() {
             {shelf.length} in stock
           </span>
           {search && <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>· "{search}"</span>}
+          <span style={{ fontSize: 10, color: 'var(--text-faint)', marginLeft: 'auto' }}>Click card to add</span>
         </div>
 
         {/* Medicine grid */}
         <div style={{
           flex: 1, minHeight: 0, overflowY: 'auto',
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))',
+          display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
           gap: '.6rem', alignContent: 'start', paddingRight: 4,
         }}>
           {shelfLoading
-            ? Array(12).fill(0).map((_, i) => (
-                <div key={i} className="skeleton" style={{ height: 118, borderRadius: 12 }} />
-              ))
+            ? Array(12).fill(0).map((_, i) => <div key={i} className="skeleton" style={{ height: 162, borderRadius: 12 }} />)
             : shelf.length === 0
             ? (
                 <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3rem 1rem', gap: '.75rem' }}>
@@ -226,7 +232,12 @@ export default function POS() {
                 </div>
               )
             : shelf.map(med => (
-                <MedicineCard key={med.id} med={med} onSelect={() => setQtyModal(med)} />
+                <MedicineCard
+                  key={med.id}
+                  med={med}
+                  flashing={!!addedFlash[med.id]}
+                  onSelect={() => handleAddMedicine(med)}
+                />
               ))
           }
         </div>
@@ -252,7 +263,7 @@ export default function POS() {
           {items.length > 0 && (
             <button
               onClick={async () => {
-                const ok = await confirm({ title: 'Clear Cart?', message: 'All items will be removed from the cart.', confirmText: 'Clear', type: 'cart' });
+                const ok = await confirm({ title: 'Clear Cart?', message: 'All items will be removed.', confirmText: 'Clear', type: 'cart' });
                 if (ok) clearCart();
               }}
               style={{ background: 'transparent', border: 'none', color: 'var(--danger)', fontSize: 11, cursor: 'pointer', fontWeight: 600, padding: '2px 6px', borderRadius: 5 }}>
@@ -261,13 +272,13 @@ export default function POS() {
           )}
         </div>
 
-        {/* Cart items — scrollable */}
+        {/* Cart items */}
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '.5rem .6rem', display: 'flex', flexDirection: 'column', gap: '.35rem' }}>
           {items.length === 0
             ? (
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-faint)', padding: '2.5rem 0', gap: '.5rem' }}>
                   <MdShoppingCart style={{ fontSize: 38, opacity: .12 }} />
-                  <p style={{ fontSize: 12 }}>Select a medicine to add</p>
+                  <p style={{ fontSize: 12 }}>Click a medicine to add</p>
                 </div>
               )
             : items.map(item => (
@@ -285,7 +296,7 @@ export default function POS() {
         {/* Bottom — customer + summary + payment + checkout */}
         <div style={{ flexShrink: 0, borderTop: '1px solid var(--border)', padding: '.6rem .7rem', display: 'flex', flexDirection: 'column', gap: '.45rem' }}>
 
-          {/* Customer */}
+          {/* Customer picker */}
           {customer
             ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '.4rem', background: 'rgba(16,185,129,.08)', border: '1px solid rgba(16,185,129,.15)', borderRadius: 8, padding: '.32rem .6rem' }}>
@@ -389,7 +400,7 @@ export default function POS() {
             </div>
           )}
 
-          {/* Checkout */}
+          {/* Checkout button */}
           <button onClick={handleCheckout} disabled={processing || items.length === 0}
             className="btn btn-primary"
             style={{ width: '100%', justifyContent: 'center', fontSize: 14, padding: '.65rem', borderRadius: 10 }}>
@@ -400,18 +411,6 @@ export default function POS() {
           </button>
         </div>
       </div>
-
-      {/* ══ Qty Modal ═════════════════════════════════════════════════════════ */}
-      {qtyModal && (
-        <QtyModal
-          med={qtyModal}
-          onClose={() => setQtyModal(null)}
-          onAdd={(med, qty) => {
-            addItem(med, 'PIECE', qty);
-            toast.success(`Added ${qty}× ${med.name}`);
-          }}
-        />
-      )}
 
       {/* ══ Receipt Modal ═════════════════════════════════════════════════════ */}
       {showReceipt && lastReceipt && (
@@ -427,7 +426,7 @@ export default function POS() {
             <div className="modal-body" id="receipt-content">
               <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
                 <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-head)' }}>Som Care Pharmacy</div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Invoice: {lastReceipt.invoiceNo}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Receipt #: {lastReceipt.invoiceNo}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{new Date(lastReceipt.createdAt).toLocaleString()}</div>
               </div>
               <hr className="divider" />
@@ -457,11 +456,9 @@ export default function POS() {
       )}
 
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes modal-in {
-          from { opacity: 0; transform: scale(.92) translateY(8px); }
-          to   { opacity: 1; transform: scale(1) translateY(0); }
-        }
+        @keyframes spin     { to { transform: rotate(360deg); } }
+        @keyframes card-pop { 0%{transform:scale(1)} 40%{transform:scale(.93)} 100%{transform:scale(1)} }
+        @keyframes modal-in { from{opacity:0;transform:scale(.92) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 4px; }
@@ -470,19 +467,17 @@ export default function POS() {
   );
 }
 
-// ── Category pill tab ─────────────────────────────────────────────────────────
+// ── Category tab ──────────────────────────────────────────────────────────────
 function CategoryTab({ name, icon, count, color, active, onClick }) {
   return (
     <button
       onClick={onClick}
       style={{
-        flexShrink: 0,
-        display: 'inline-flex', alignItems: 'center', gap: 6,
+        flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 6,
         padding: '7px 14px', borderRadius: 99,
         border: `1.5px solid ${active ? color : 'var(--border)'}`,
         background: active ? color : 'var(--surface)',
-        cursor: 'pointer', outline: 'none',
-        transition: 'all .15s',
+        cursor: 'pointer', outline: 'none', transition: 'all .15s',
         boxShadow: active ? `0 2px 12px ${color}55` : 'none',
         transform: active ? 'translateY(-1px)' : 'none',
       }}
@@ -490,212 +485,99 @@ function CategoryTab({ name, icon, count, color, active, onClick }) {
       onMouseLeave={e => { if (!active) { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface)'; } }}
     >
       <span style={{ fontSize: 14, lineHeight: 1 }}>{icon || '💊'}</span>
-      <span style={{ fontSize: 12, fontWeight: 700, color: active ? '#fff' : 'var(--text)', whiteSpace: 'nowrap' }}>
-        {name}
-      </span>
-      <span style={{
-        fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99,
-        background: active ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.06)',
-        color: active ? '#fff' : 'var(--text-faint)',
-      }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: active ? '#fff' : 'var(--text)', whiteSpace: 'nowrap' }}>{name}</span>
+      <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: active ? 'rgba(255,255,255,.25)' : 'rgba(255,255,255,.06)', color: active ? '#fff' : 'var(--text-faint)' }}>
         {count}
       </span>
     </button>
   );
 }
 
-// ── Medicine card ─────────────────────────────────────────────────────────────
-function MedicineCard({ med, onSelect }) {
-  const low = med.stockQuantity > 0 && med.stockQuantity <= med.minimumStock;
+// ── Medicine card — click adds directly to cart ───────────────────────────────
+function MedicineCard({ med, onSelect, flashing }) {
+  const [imgErr, setImgErr] = useState(false);
+  const photo    = imgUrl(med.imageUrl);
+  const hasPhoto = photo && !imgErr;
+  const low      = med.stockQuantity > 0 && med.stockQuantity <= med.minimumStock;
+  const inCart   = flashing;
 
   return (
     <button
       onClick={onSelect}
       title={`${med.name} — click to add`}
       style={{
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 12, padding: '.65rem .6rem',
+        background: inCart ? 'rgba(16,185,129,.12)' : 'var(--surface)',
+        border: `1px solid ${inCart ? 'var(--primary)' : 'var(--border)'}`,
+        borderRadius: 12, padding: 0,
         textAlign: 'left', cursor: 'pointer', outline: 'none',
-        transition: 'border-color .12s, background .12s, transform .1s, box-shadow .12s',
-        display: 'flex', flexDirection: 'column', gap: 3,
+        transition: 'border-color .15s, transform .12s, box-shadow .15s, background .15s',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        animation: inCart ? 'card-pop .25s ease' : 'none',
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.borderColor = 'var(--primary)';
-        e.currentTarget.style.background  = 'rgba(16,185,129,.06)';
-        e.currentTarget.style.transform   = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow   = '0 4px 14px rgba(16,185,129,.18)';
+        if (!inCart) {
+          e.currentTarget.style.borderColor = 'var(--primary)';
+          e.currentTarget.style.transform   = 'translateY(-3px)';
+          e.currentTarget.style.boxShadow   = '0 6px 20px rgba(16,185,129,.2)';
+        }
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'var(--border)';
-        e.currentTarget.style.background  = 'var(--surface)';
-        e.currentTarget.style.transform   = 'none';
-        e.currentTarget.style.boxShadow   = 'none';
+        if (!inCart) {
+          e.currentTarget.style.borderColor = 'var(--border)';
+          e.currentTarget.style.transform   = 'none';
+          e.currentTarget.style.boxShadow   = 'none';
+        }
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 2 }}>
-        <div style={{ width: 30, height: 30, borderRadius: 8, background: 'rgba(16,185,129,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <GiPill style={{ color: 'var(--primary)', fontSize: 16 }} />
-        </div>
-        <span className={`badge ${low ? 'badge-warning' : 'badge-success'}`} style={{ fontSize: 9, fontWeight: 800 }}>
+      {/* Photo / icon area */}
+      <div style={{
+        height: 82, flexShrink: 0, position: 'relative', overflow: 'hidden',
+        background: hasPhoto ? '#000' : 'linear-gradient(135deg,rgba(16,185,129,.12),rgba(6,182,212,.08))',
+      }}>
+        {hasPhoto
+          ? <img src={photo} alt={med.name} onError={() => setImgErr(true)}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: .92 }} />
+          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <GiPill style={{ color: 'var(--primary)', fontSize: 34, opacity: .45 }} />
+            </div>
+        }
+
+        {/* Added flash overlay */}
+        {inCart && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(16,185,129,.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <MdCheck style={{ color: '#fff', fontSize: 28 }} />
+          </div>
+        )}
+
+        <span className={`badge ${low ? 'badge-warning' : 'badge-success'}`}
+          style={{ position: 'absolute', top: 5, right: 5, fontSize: 9, fontWeight: 800 }}>
           {med.stockQuantity}
         </span>
+        {med.prescriptionRequired && (
+          <span style={{ position: 'absolute', top: 5, left: 5, fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'rgba(245,158,11,.85)', color: '#fff', letterSpacing: .3 }}>
+            Rx
+          </span>
+        )}
       </div>
-      <div style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.25, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: 26 }}>
-        {med.name}
-      </div>
-      <div style={{ fontSize: 9, color: 'var(--text-muted)', letterSpacing: .2 }}>
-        {med.form}{med.strength ? ` · ${med.strength}` : ''}
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--primary)', marginTop: 2 }}>
-        {formatCurrency(med.retailPrice)}
+
+      {/* Info */}
+      <div style={{ padding: '.5rem .55rem .55rem', display: 'flex', flexDirection: 'column', gap: 2, flex: 1 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, lineHeight: 1.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', minHeight: 28, color: 'var(--text)' }}>
+          {med.name}
+        </div>
+        <div style={{ fontSize: 9, color: 'var(--text-faint)', letterSpacing: .2, marginTop: 1 }}>
+          {med.form}{med.strength ? ` · ${med.strength}` : ''}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--primary)' }}>
+            {formatCurrency(med.retailPrice)}
+          </span>
+          <span style={{ fontSize: 14, color: inCart ? 'var(--primary)' : 'var(--text-faint)', fontWeight: 700 }}>
+            {inCart ? '✓' : '+'}
+          </span>
+        </div>
       </div>
     </button>
-  );
-}
-
-// ── Qty picker modal ──────────────────────────────────────────────────────────
-function QtyModal({ med, onClose, onAdd }) {
-  const [qty, setQty] = useState(1);
-  const price   = parseFloat(med.retailPrice) || 0;
-  const maxQty  = med.stockQuantity;
-  const total   = price * qty;
-
-  useEffect(() => {
-    const h = e => { if (e.key === 'Escape') onClose(); if (e.key === 'Enter') handleAdd(); };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [qty]);
-
-  const clamp = v => Math.max(1, Math.min(maxQty, v));
-  const handleAdd = () => { onAdd(med, qty); onClose(); };
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'rgba(0,0,0,0.65)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 200,
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 18,
-          width: 340,
-          overflow: 'hidden',
-          boxShadow: '0 24px 64px rgba(0,0,0,.5)',
-          animation: 'modal-in .18s ease',
-        }}
-      >
-        {/* Header */}
-        <div style={{ padding: '1rem 1.1rem .8rem', borderBottom: '1px solid var(--border)', background: 'rgba(16,185,129,.05)' }}>
-          <div style={{ display: 'flex', gap: '.7rem', alignItems: 'flex-start' }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(16,185,129,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <GiPill style={{ color: 'var(--primary)', fontSize: 24 }} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', lineHeight: 1.3, marginBottom: 2 }}>{med.name}</div>
-              {med.genericName && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{med.genericName}</div>}
-              <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 1 }}>
-                {[med.form, med.strength].filter(Boolean).join(' · ')}
-              </div>
-            </div>
-            <button onClick={onClose}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', padding: 4, display: 'flex', flexShrink: 0 }}>
-              <MdClose style={{ fontSize: 16 }} />
-            </button>
-          </div>
-          <div style={{ display: 'flex', gap: 6, marginTop: '.55rem' }}>
-            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'rgba(16,185,129,.15)', color: 'var(--primary)', fontWeight: 700 }}>
-              {maxQty} in stock
-            </span>
-            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: 'var(--surface-light)', color: 'var(--text-muted)', fontWeight: 600 }}>
-              {formatCurrency(price)} / pc
-            </span>
-          </div>
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: '1.1rem 1.25rem 1.25rem' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: .5, marginBottom: '.8rem' }}>
-            Quantity
-          </div>
-
-          {/* Stepper */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1.1rem', marginBottom: '1rem' }}>
-            <button
-              onClick={() => setQty(q => clamp(q - 1))}
-              disabled={qty <= 1}
-              style={{
-                width: 46, height: 46, borderRadius: '50%',
-                border: '2px solid var(--border)', background: 'var(--surface-light)',
-                color: qty <= 1 ? 'var(--text-faint)' : 'var(--text)',
-                cursor: qty <= 1 ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all .1s', flexShrink: 0,
-              }}
-            >
-              <MdRemove style={{ fontSize: 22 }} />
-            </button>
-
-            <input
-              autoFocus
-              type="number" min="1" max={maxQty}
-              value={qty}
-              onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) setQty(clamp(v)); }}
-              style={{
-                width: 84, height: 54, fontSize: 30, fontWeight: 800,
-                textAlign: 'center',
-                background: 'var(--surface-light)',
-                border: '2px solid var(--primary)',
-                borderRadius: 12, color: 'var(--text)', outline: 'none',
-              }}
-            />
-
-            <button
-              onClick={() => setQty(q => clamp(q + 1))}
-              disabled={qty >= maxQty}
-              style={{
-                width: 46, height: 46, borderRadius: '50%',
-                border: '2px solid var(--border)',
-                background: qty >= maxQty ? 'var(--surface)' : 'rgba(16,185,129,.15)',
-                color: qty >= maxQty ? 'var(--text-faint)' : 'var(--primary)',
-                cursor: qty >= maxQty ? 'default' : 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'all .1s', flexShrink: 0,
-              }}
-            >
-              <MdAdd style={{ fontSize: 22 }} />
-            </button>
-          </div>
-
-          {/* Total */}
-          <div style={{ background: 'var(--surface-light)', borderRadius: 10, padding: '.6rem .9rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {qty} × {formatCurrency(price)}
-            </span>
-            <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--primary)' }}>
-              {formatCurrency(total)}
-            </span>
-          </div>
-
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: '.5rem' }}>
-            <button onClick={onClose} className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}>
-              Cancel
-            </button>
-            <button onClick={handleAdd} className="btn btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
-              <MdAdd style={{ fontSize: 16 }} /> Add to Cart
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -728,7 +610,7 @@ function CartItem({ item, onUpdateQty, onUpdatePrice, onRemove }) {
               <MdAdd style={{ fontSize: 11 }} />
             </button>
           </div>
-          {/* Price */}
+          {/* Editable price */}
           {editPrice
             ? <input type="number" autoFocus value={tempPrice} onChange={e => setTempPrice(e.target.value)}
                 onBlur={() => { onUpdatePrice(item.medicineId, item.sellingUnit, tempPrice); setEditPrice(false); }}
