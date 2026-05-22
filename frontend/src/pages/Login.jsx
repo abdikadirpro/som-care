@@ -18,7 +18,7 @@ export default function Login() {
     try {
       const loggedUser = await login(form.email, form.password);
       toast.success('Welcome back!');
-      navigate(loggedUser.role === 'CUSTOMER' ? '/shop' : '/');
+      navigate(loggedUser.role === 'CUSTOMER' ? '/shop' : '/dashboard');
     } catch (err) {
       toast.error(err.response?.data?.message || 'Login failed');
     } finally {

@@ -46,7 +46,7 @@ const RootRedirect = () => {
   if (loading) return <FullPageSpinner />;
   if (!user)                      return <Landing />;
   if (user.role === 'CUSTOMER')   return <Navigate to="/shop" replace />;
-  return <Dashboard />;
+  return <Navigate to="/dashboard" replace />;
 };
 
 // Shop routes are for guests and customers only — staff go to their dashboard
